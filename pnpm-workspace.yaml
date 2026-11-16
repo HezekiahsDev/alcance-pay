@@ -3,3 +3,11 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true
+
+# Same supply-chain rule as the server's pnpm: only use package versions
+# published at least a day ago (minutes).
+minimumReleaseAge: 1440
+
+overrides:
+  # 15.5.0 (jest dependency) is newer than the release-age rule allows.
+  '@sinonjs/fake-timers': 15.4.0
