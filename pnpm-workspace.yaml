@@ -3,6 +3,8 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true
+  # File watcher for nest --watch (dev only); its native build isn't needed.
+  '@parcel/watcher': false
 
 # Same supply-chain rule as the server's pnpm: only use package versions
 # published at least a day ago (minutes).
