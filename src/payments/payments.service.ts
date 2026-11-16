@@ -112,7 +112,9 @@ export class PaymentsService {
         currency,
         reference,
         callback_url: dto.callbackUrl,
-        channels: dto.saveCard ? ['card'] : dto.channels,
+        // saveCard doesn't restrict payment methods: the card is saved only
+        // if the customer chooses to pay by card.
+        channels: dto.channels,
         subaccount: app.subaccountCode ?? undefined,
         metadata: {
           app: app.id,

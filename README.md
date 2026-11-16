@@ -40,7 +40,7 @@ POST /v1/payments
   "reference": "MEMBERSHIP.abc123", // optional; generated as <APP>-<uuid> if omitted
   "callbackUrl": "https://grow.alcance.ng/checkout/status",   // origin must be registered
   "customerId": "user-uuid",        // your user id; required to save the card
-  "saveCard": true,                 // card-only checkout, card kept for later charges
+  "saveCard": true,                 // keep the card if they pay by card (any method allowed)
   "metadata": { "plan": "initial" } // returned with every event
 }
 → 201 { "reference": "...", "authorizationUrl": "https://checkout.paystack.com/...", "accessCode": "..." }
@@ -48,6 +48,11 @@ POST /v1/payments
 
 Send the customer to `authorizationUrl`. Paystack returns them to `callbackUrl`
 with `?reference=…`.
+
+Checkout offers every payment method enabled on the Alcance Paystack account
+(card, bank transfer, USSD, …). With `saveCard`, a card is saved only when the
+customer pays by card: check `card` in the verify result before relying on
+automatic charges. Pass `"channels": ["card"]` to require a card.
 
 ### Confirm it
 

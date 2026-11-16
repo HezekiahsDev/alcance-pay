@@ -48,7 +48,11 @@ export class CreateCheckoutDto {
   @MaxLength(100)
   customerId?: string;
 
-  /** Save the card for later charges (card payments only). */
+  /**
+   * Save the card for later charges if the customer pays by card. Other
+   * methods (bank transfer, USSD, ...) still work; no card is saved then.
+   * Pass channels: ["card"] to require a card.
+   */
   @IsOptional()
   @IsBoolean()
   saveCard?: boolean;
