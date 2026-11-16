@@ -14,7 +14,7 @@ Branch guard: only the main branch may deploy. The script aborts if your
 checked-out branch is not main.
 
 Required (set in .env.deploy, see .env.deploy.example):
-  DEPLOY_HOST       SSH target, e.g. alcance@164.68.103.109.
+  DEPLOY_HOST       SSH target, e.g. deploy-user@your-server-host.
 
 Optional:
   DEPLOY_PATH       Existing repo path on server. Default: /home/alcance/projects/alcance/alcance-pay
