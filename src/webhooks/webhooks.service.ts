@@ -97,6 +97,17 @@ export class WebhooksService {
       });
       if (payment) await this.payments.applyResult(payment, body.data ?? {});
     }
+    // ... and transfer records for payout events.
+    if (
+      reference &&
+      stored.event.startsWith('transfer.') &&
+      body.data?.status
+    ) {
+      await this.prisma.transfer.updateMany({
+        where: { reference },
+        data: { status: body.data.status },
+      });
+    }
 
     if (app.webhookUrl) await this.delivery.schedule(stored, app);
   }
@@ -116,6 +127,11 @@ export class WebhooksService {
         include: { app: true },
       });
       if (payment) return payment.app;
+      const transfer = await this.prisma.transfer.findUnique({
+        where: { reference },
+        include: { app: true },
+      });
+      if (transfer) return transfer.app;
     }
     const metaApp = metadataApp(body.data?.metadata);
     if (metaApp) {

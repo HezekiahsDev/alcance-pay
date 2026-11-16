@@ -43,6 +43,7 @@ model App {
   payments   Payment[]
   cards      Card[]
   deliveries Delivery[]
+  transfers  Transfer[]
 }
 
 enum PaymentStatus {
@@ -123,6 +124,7 @@ model WebhookEvent {
   signature  String
   receivedAt DateTime   @default(now())
   deliveries Delivery[]
+  transfers  Transfer[]
 
   @@index([reference])
 }
@@ -151,4 +153,25 @@ model Delivery {
 
   @@unique([eventId, appId])
   @@index([status, nextAttemptAt])
+}
+
+/// A payout to a bank account, started by an app (e.g. dali withdrawals).
+model Transfer {
+  id             String        @id @default(uuid()) @db.Uuid
+  app            App           @relation(fields: [appId], references: [id])
+  appId          String
+  reference      String        @unique
+  amount         Int // kobo
+  currency       String        @default("NGN")
+  recipientCode  String
+  transferCode   String?
+  /// Paystack transfer status: pending | otp | success | failed | reversed | …
+  status         String        @default("pending")
+  reason         String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  WebhookEvent   WebhookEvent? @relation(fields: [webhookEventId], references: [id])
+  webhookEventId String?       @db.Uuid
+
+  @@index([appId, status])
 }

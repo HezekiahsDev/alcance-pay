@@ -12,6 +12,8 @@ import { PaymentsController } from './payments/payments.controller';
 import { WebhooksService } from './webhooks/webhooks.service';
 import { DeliveryService } from './webhooks/delivery.service';
 import { WebhooksController } from './webhooks/webhooks.controller';
+import { PayoutsService } from './payouts/payouts.service';
+import { PayoutsController } from './payouts/payouts.controller';
 
 @Controller()
 class HealthController {
@@ -26,7 +28,12 @@ class HealthController {
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), ScheduleModule.forRoot()],
-  controllers: [HealthController, PaymentsController, WebhooksController],
+  controllers: [
+    HealthController,
+    PaymentsController,
+    PayoutsController,
+    WebhooksController,
+  ],
   providers: [
     { provide: PAY_CONFIG, useFactory: () => loadConfig() },
     PrismaService,
@@ -37,6 +44,7 @@ class HealthController {
     PaymentsService,
     WebhooksService,
     DeliveryService,
+    PayoutsService,
   ],
 })
 export class AppModule {}

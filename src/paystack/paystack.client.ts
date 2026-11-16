@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -106,10 +107,62 @@ export class PaystackClient {
     });
   }
 
+  // ─── Banks and transfers (payouts) ───────────────────────────────────────
+
+  listBanks(currency = 'NGN') {
+    return this.request<Array<{ name: string; code: string }>>(
+      'GET',
+      `/bank?currency=${encodeURIComponent(currency)}&perPage=100`,
+    );
+  }
+
+  resolveAccount(accountNumber: string, bankCode: string) {
+    return this.request<{ account_number: string; account_name: string }>(
+      'GET',
+      `/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
+    );
+  }
+
+  createTransferRecipient(body: {
+    name: string;
+    account_number: string;
+    bank_code: string;
+  }) {
+    return this.request<{ recipient_code: string }>(
+      'POST',
+      '/transferrecipient',
+      { type: 'nuban', currency: 'NGN', ...body },
+    );
+  }
+
+  initiateTransfer(body: {
+    amount: number;
+    recipient: string;
+    reference: string;
+    reason?: string;
+  }) {
+    return this.request<{ status: string; transfer_code: string }>(
+      'POST',
+      '/transfer',
+      { source: 'balance', ...body },
+    );
+  }
+
+  /** Transfer by reference; null when Paystack has no such transfer. */
+  verifyTransfer(reference: string) {
+    return this.request<{ status: string; transfer_code?: string }>(
+      'GET',
+      `/transfer/verify/${encodeURIComponent(reference)}`,
+      undefined,
+      { notFoundAsNull: true },
+    );
+  }
+
   private async request<T>(
     method: 'GET' | 'POST',
     path: string,
     body?: unknown,
+    opts: { notFoundAsNull?: boolean } = {},
   ): Promise<T> {
     let res: Response;
     try {
@@ -126,14 +179,20 @@ export class PaystackClient {
       this.logger.error(`Paystack ${method} ${path} unreachable`, err as Error);
       throw new BadGatewayException('Payment provider unreachable');
     }
+    if (res.status === 404 && opts.notFoundAsNull) return null as T;
     const json = (await res.json().catch(() => null)) as Envelope<T> | null;
     if (!res.ok || !json?.status) {
       this.logger.warn(
         `Paystack ${method} ${path} → ${res.status}: ${json?.message ?? 'no body'}`,
       );
-      throw new BadGatewayException(
-        json?.message || `Payment provider error (${res.status})`,
-      );
+      const message = json?.message || `Payment provider error (${res.status})`;
+      // Paystack rejected the input (e.g. an account that doesn't resolve):
+      // pass its message on as a client error. Auth/rate/server problems on
+      // Paystack's side are a 502.
+      if ([400, 404, 422].includes(res.status)) {
+        throw new BadRequestException(message);
+      }
+      throw new BadGatewayException(message);
     }
     return json.data;
   }

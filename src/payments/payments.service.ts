@@ -138,7 +138,9 @@ export class PaymentsService {
 
   /** Asks Paystack for the latest status and records it. Idempotent. */
   async verify(app: App, reference: string): Promise<PaymentView> {
-    const payment = await this.ownPayment(app, reference);
+    const payment =
+      (await this.adoptLegacy(app, reference)) ??
+      (await this.ownPayment(app, reference));
     if (payment.status === 'SUCCESS') return this.view(payment);
     const data = await this.paystack.verify(reference);
     return this.view(await this.applyResult(payment, data));
@@ -357,6 +359,36 @@ export class PaymentsService {
       metadata: payment.metadata,
       card: card ? cardView(card) : null,
     };
+  }
+
+  /**
+   * A payment the app started directly with Paystack before moving to this
+   * service (its reference has one of the app's prefixes): record it here so
+   * verify works for it too. Returns null when there's nothing to adopt.
+   */
+  private async adoptLegacy(
+    app: App,
+    reference: string,
+  ): Promise<Payment | null> {
+    if (await this.prisma.payment.findUnique({ where: { reference } }))
+      return null;
+    if (!app.referencePrefixes.some((p) => p && reference.startsWith(p)))
+      return null;
+    const data = await this.paystack.verify(reference).catch(() => null);
+    if (!data?.reference || data.amount === undefined) return null;
+    const customer = (data as { customer?: { email?: string } }).customer;
+    const payment = await this.prisma.payment.create({
+      data: {
+        appId: app.id,
+        reference,
+        kind: 'CHECKOUT',
+        email: (customer?.email ?? 'unknown@legacy').toLowerCase(),
+        amount: data.amount,
+        currency: data.currency ?? 'NGN',
+        metadata: { adopted: true } as Prisma.InputJsonValue,
+      },
+    });
+    return payment;
   }
 
   private async ownPayment(app: App, reference: string) {
