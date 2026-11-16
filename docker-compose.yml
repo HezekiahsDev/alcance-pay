@@ -1,0 +1,26 @@
+# Postgres for alcance-pay. Credentials come from .env (POSTGRES_USER,
+# POSTGRES_PASSWORD, POSTGRES_DB). Bound to localhost; host port 5439 avoids
+# the other databases on the shared server.
+#
+#   docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alcance-pay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports:
+      - '127.0.0.1:${POSTGRES_HOST_PORT:-5439}:5432'
+    volumes:
+      - alcance_pay_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  alcance_pay_postgres:

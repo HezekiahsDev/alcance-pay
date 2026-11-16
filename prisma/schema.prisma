@@ -1,0 +1,154 @@
+// alcance-pay: one Paystack account shared by every Alcance app.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// How events are forwarded to an app.
+enum ForwardMode {
+  /// Paystack's original body and x-paystack-signature, unchanged. For apps
+  /// that already verify Paystack webhooks themselves (e.g. dali).
+  PAYSTACK
+  /// A normalized event signed with the app's own webhook secret.
+  ALCANCE
+}
+
+/// An Alcance product that uses the payment service (grow, dali, ...).
+model App {
+  id                String      @id // short slug, e.g. "grow"
+  name              String
+  /// sha256 of the app's API key. The key itself is shown once, at creation.
+  apiKeyHash        String      @unique
+  apiKeyPrefix      String // first characters, to recognise a key in logs
+  /// Secret used to sign events forwarded in ALCANCE mode.
+  webhookSecret     String
+  webhookUrl        String?
+  forwardMode       ForwardMode @default(ALCANCE)
+  /// Paystack subaccount (ACCT_xxx) that this app's payments settle to.
+  subaccountCode    String?
+  /// Reference prefixes this app owns (e.g. "DALI-"), used to route events
+  /// for payments the app started directly with Paystack.
+  referencePrefixes String[]    @default([])
+  /// Origins allowed as checkout callback URLs, e.g. https://grow.alcance.ng
+  callbackOrigins   String[]    @default([])
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  payments   Payment[]
+  cards      Card[]
+  deliveries Delivery[]
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+}
+
+enum PaymentKind {
+  CHECKOUT // customer pays on Paystack's page
+  CARD_CHARGE // saved card charged without the customer present
+}
+
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  app             App           @relation(fields: [appId], references: [id])
+  appId           String
+  reference       String        @unique
+  kind            PaymentKind
+  status          PaymentStatus @default(PENDING)
+  email           String
+  /// The app's own id for the customer (e.g. a user id), for saved cards.
+  customerId      String?
+  amount          Int // kobo
+  currency        String        @default("NGN")
+  /// Free-form data from the app, returned with every event.
+  metadata        Json?
+  saveCard        Boolean       @default(false)
+  cardId          String?       @db.Uuid
+  channel         String?
+  gatewayResponse String?
+  paystackId      String?
+  fees            Int?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([appId, status])
+  @@index([appId, customerId])
+}
+
+/// A reusable card authorization, scoped to one app and customer.
+model Card {
+  id                     String   @id @default(uuid()) @db.Uuid
+  app                    App      @relation(fields: [appId], references: [id])
+  appId                  String
+  customerId             String
+  email                  String
+  /// Paystack authorization_code, AES-256-GCM encrypted (never returned).
+  authorizationEncrypted String
+  /// Paystack's card signature: the same card saved twice is one row.
+  signature              String
+  brand                  String?
+  last4                  String?
+  expMonth               String?
+  expYear                String?
+  bank                   String?
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([appId, customerId, signature])
+  @@index([appId, customerId])
+}
+
+/// Every Paystack webhook received (deduplicated).
+model WebhookEvent {
+  id         String     @id @default(uuid()) @db.Uuid
+  /// event + Paystack data.id (or reference): the same delivery stored once.
+  dedupeKey  String     @unique
+  event      String
+  reference  String?
+  appId      String?
+  payload    Json
+  /// Exact body and signature as received, for PAYSTACK-mode forwarding.
+  rawBody    String
+  signature  String
+  receivedAt DateTime   @default(now())
+  deliveries Delivery[]
+
+  @@index([reference])
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED // gave up after the last retry
+}
+
+/// Forwarding of one event to one app, with retries.
+model Delivery {
+  id            String         @id @default(uuid()) @db.Uuid
+  event         WebhookEvent   @relation(fields: [eventId], references: [id])
+  eventId       String         @db.Uuid
+  app           App            @relation(fields: [appId], references: [id])
+  appId         String
+  status        DeliveryStatus @default(PENDING)
+  attempts      Int            @default(0)
+  nextAttemptAt DateTime       @default(now())
+  lastStatus    Int?
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([eventId, appId])
+  @@index([status, nextAttemptAt])
+}
